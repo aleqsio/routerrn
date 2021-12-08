@@ -1,5 +1,5 @@
 import { atom, useAtom } from "jotai";
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 
 import {
   Button,
@@ -16,6 +16,8 @@ import {
 } from "react-native-screens";
 import useCheckbox from "./useCheckbox";
 
+import useNestedHistory from "./useNestedHistory";
+
 export const historyAtom = atom<string[]>([]); // last visited url is last element
 export const urlAtom = atom(
   (get) => get(historyAtom)[get(historyAtom).length - 1],
@@ -26,9 +28,8 @@ export const urlAtom = atom(
 export const viewsAtom = atom<{ [key: string]: JSX.Element }>({});
 
 const NativeRouter: any = ({ children }) => {
-  const [url, setUrl] = useAtom(urlAtom);
+  const { url, navigate } = useNestedHistory();
   const [views, setViews] = useAtom(viewsAtom);
-  const [history, setHistory] = useAtom(historyAtom);
   const screens = [
     ...new Set(history.filter((url) => views[url]).reverse()),
   ].reverse();
@@ -36,21 +37,6 @@ const NativeRouter: any = ({ children }) => {
     "shouldPopExisting",
     true
   );
-
-  // should entering exisitng url go back in history
-  const navigate = (url: string) => {
-    if (!views[url]) return;
-    if (!shouldPopExistingScreens) {
-      setUrl(url);
-      return;
-    }
-    if (history.find((h) => h === url)) {
-      setHistory((h) => [...h.slice(0, h.indexOf(url)), url]);
-    } else {
-      setUrl(url);
-    }
-  };
-  console.log({ screens });
 
   return (
     <View style={{ flex: 1, width: "100%" }}>
@@ -66,22 +52,22 @@ const NativeRouter: any = ({ children }) => {
             flexWrap: "wrap",
           }}
         >
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={{ width: "100%", backgroundColor: "gray" }}
+            value={url}
+            onChangeText={setUrl}
+          />
           {Object.keys(views).map((v) => (
             <TouchableOpacity
+              key={v}
               style={{ padding: 5 }}
               onPress={() => navigate(v)}
             >
               <Text>{v}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
-            style={{ padding: 5 }}
-            onPress={() => {
-              setHistory((h) => h.slice(0, -1));
-            }}
-          >
-            <Text>UNDO</Text>
-          </TouchableOpacity>
         </View>
 
         {popCheckbox}
@@ -89,6 +75,7 @@ const NativeRouter: any = ({ children }) => {
       <ScreenStack style={{ flex: 1 }}>
         {screens.map((currUrl, idx) => (
           <Screen
+            // stackAnimation="fade"
             key={`${currUrl}-${idx}`}
             onWillDisappear={() => {
               if (url === currUrl) {
