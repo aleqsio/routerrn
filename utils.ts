@@ -17,6 +17,9 @@ export const last = <T>(a: T[]) => {
 export const combineUrls = (...urls: (string | undefined)[]) => {
   // remove all multiple slashes, remove * or / from the end
   const path = urls.join("/").replaceAll(/\/+/g, "/");
-  if (path !== "/") return path.replace(/(\*|\/)$/, "");
+  if (path === "") return "/";
+  if (path !== "/") {
+    return path.replace(/(\*|\/)$/, "");
+  }
   return path;
 };

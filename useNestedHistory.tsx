@@ -10,7 +10,13 @@ import {
 } from "./history";
 import { last } from "./utils";
 
-export const historyAtom = atom<NestedHistory>({ prefixes: { "/": [] } });
+export const historyAtom = atom<NestedHistory>({
+  prefixes: {
+    "/": { index: 0, segments: ["mates"] },
+    "/mates": { index: 0, segments: ["bestmate"] },
+    "/mates/bestmate": { index: -1, segments: [] },
+  },
+});
 
 // const composeUrl = (history: History, pathPrefix = "ROOT"): string => {
 //   const nextPathSegment = last(history.prefixes[pathPrefix]);
@@ -71,6 +77,7 @@ export const urlAtom = atom(
 );
 const useNestedHistory = () => {
   const [history, setHistory] = useAtom(historyAtom);
+  console.log(history);
   const [url, setUrl] = useAtom(urlAtom);
   const undoLocal = (onPath?: string) =>
     setHistory((history) => undo(history, onPath));

@@ -1,51 +1,95 @@
-import { combineUrls, last } from "./utils";
+import { combineUrls } from "./utils";
 import produce from "immer";
 
+export type PrefixHistory = {
+  index: number;
+  segments: string[];
+};
+
 export type NestedHistory = {
-  prefixes: { [prefix: string]: string[]; "/": string[] };
+  prefixes: { [prefix: string]: PrefixHistory; "/": PrefixHistory };
 };
 
 const reccurentGetUrlFromHistory = (
   history: NestedHistory,
   pathPrefix = "/"
 ): string => {
-  const nextPathSegment = last(history.prefixes[pathPrefix]);
-  if (!nextPathSegment) return "";
-
-  return combineUrls(
-    last(history.prefixes[pathPrefix]),
-    reccurentGetUrlFromHistory(
-      history,
-      combineUrls(pathPrefix, nextPathSegment)
-    )
-  );
+  const nextPrefixObject = history.prefixes[pathPrefix];
+  if (!nextPrefixObject) {
+    console.warn(history, pathPrefix, nextPrefixObject);
+    throw new Error("path Prefix not found");
+  }
+  if (nextPrefixObject.index < 0) return "";
+  const segment = history.prefixes[pathPrefix].segments[nextPrefixObject.index];
+  if (!segment) throw new Error("segment is null");
+  const nextPrefix = combineUrls(pathPrefix, segment);
+  return combineUrls(segment, reccurentGetUrlFromHistory(history, nextPrefix));
 };
 
 export const getCurrentUrlFromHistory = (history: NestedHistory) => {
-  return reccurentGetUrlFromHistory(history);
+  const url = combineUrls("/", reccurentGetUrlFromHistory(history));
+  return url;
 };
 
 export const pushUrlToHistory = (history: NestedHistory, url: string) => {
-  const urlSegments = ["/", ...url.replace(/(\*|\/)$/, "").split("/")];
+  console.log("push");
+  const newUrlSegments = [
+    "/",
+    ...url
+      .replace(/(\*|\/)$/, "")
+      .split("/")
+      .filter((f) => !!f), // url contains empty string, fix!
+  ];
   const newHistory = produce(history, (draft) => {
-    urlSegments.forEach((part, index) => {
-      const prefix = combineUrls(...urlSegments.slice(0, index + 1));
-      if (
-        !draft.prefixes[prefix] ||
-        draft.prefixes[prefix][draft.prefixes[prefix].length - 1] !==
-          urlSegments[index + 1]
-      ) {
-        // maybe add poping from history if duplicate entry is added
-        // const existingSameUrlIndex = draft.prefixes[prefix].findIndex(
-        //   (part) => part === parts[index + 1]
-        // );
-        // if (existingSameUrlIndex === -1) {
-        draft.prefixes[prefix] = [
-          ...(draft.prefixes[prefix] || []),
-          ...(urlSegments[index + 1] ? [urlSegments[index + 1]] : []),
-        ];
-        // }
+    newUrlSegments.forEach((newSegment, newUrlSegmentIndex) => {
+      const prefix = combineUrls(
+        ...newUrlSegments.slice(0, newUrlSegmentIndex + 1)
+      );
+      draft.prefixes[prefix];
+      if (!draft.prefixes[prefix]) {
+        draft.prefixes[prefix] = {
+          index: -1,
+          segments: [],
+        };
       }
+      if (newUrlSegments[newUrlSegmentIndex + 1]) {
+        if (
+          draft.prefixes[prefix].segments[draft.prefixes[prefix].index] !==
+          newUrlSegments[newUrlSegmentIndex + 1]
+        ) {
+          draft.prefixes[prefix].segments = [
+            ...draft.prefixes[prefix].segments.slice(
+              0,
+              draft.prefixes[prefix].index + 1
+            ),
+            newUrlSegments[newUrlSegmentIndex + 1],
+          ];
+          draft.prefixes[prefix].index =
+            draft.prefixes[prefix].segments.length - 1;
+        } else if (
+          draft.prefixes[prefix].segments[draft.prefixes[prefix].index + 1] ===
+          newUrlSegments[newUrlSegmentIndex + 1]
+        ) {
+          draft.prefixes[prefix].index += 1;
+        }
+      }
+
+      // if (
+      //   !draft.prefixes[prefix] ||
+      //   draft.prefixes[prefix][draft.prefixes[prefix].length - 1] !==
+      //     newUrlSegments[newUrlSegmentIndex + 1]
+      // ) {
+      //   // maybe add poping from history if duplicate entry is added
+      //   // const existingSameUrlIndex = draft.prefixes[prefix].findIndex(
+      //   //   (part) => part === parts[index + 1]
+      //   // );
+      //   // if (existingSameUrlIndex === -1) {
+      //   draft.prefixes[prefix] = [
+      //     ...(draft.prefixes[prefix] || []),
+      //     ...(urlSegments[index + 1] ? [urlSegments[index + 1]] : []),
+      //   ];
+      //   // }
+      // }
     });
     if (!url.endsWith("*")) {
       draft.prefixes = {
@@ -63,34 +107,72 @@ export const pushUrlToHistory = (history: NestedHistory, url: string) => {
 
 const undoRecursive = (
   history: NestedHistory,
-  onPath?: string
+  onPath?: string,
+  maxDepth?: number
 ): NestedHistory => {
+  if (maxDepth === 0) {
+    console.warn("max depth reached");
+    return history;
+  }
   const url = getCurrentUrlFromHistory(history);
   let path = onPath?.startsWith("/")
     ? onPath
     : combineUrls("/", onPath || url || undefined);
-  console.log({ path });
   const prefixes = history.prefixes[path];
   if (!prefixes) {
+    return undoRecursive(
+      history,
+      combineUrls(...path.split("/").slice(0, -1)),
+      maxDepth || 0 - 1
+    );
+  }
+
+  if (history.prefixes[path].index < 0) {
     if (path === "/") {
       console.log("UNHANDLED UNDO, SHOULD EXIT APP");
       return history;
     }
-    return undoRecursive(history, combineUrls(...path.split("/").slice(0, -1)));
-  } else if (prefixes.length === 1) {
-    return produce(history, (draft) => {
-      if (path === "/") {
-        console.log("UNHANDLED UNDO, SHOULD EXIT APP");
-      } else {
-        draft.prefixes[path] = [];
-      }
-    });
+    return undoRecursive(
+      history,
+      combineUrls(...path.split("/").slice(0, -1)),
+      maxDepth || 0 - 1
+    );
   } else {
-    return produce(history, (draft) => {
-      draft.prefixes[path].pop();
+    const newHistory = produce(history, (draft) => {
+      draft.prefixes[path].index -= 1;
     });
+    return newHistory;
   }
+
+  // if (!prefixes || prefixes.length === 0) {
+  //   if (path === "/") {
+  //     console.log("UNHANDLED UNDO, SHOULD EXIT APP");
+  //     return history;
+  //   }
+  //   console.log("NO PREFIXES");
+  //   return undoRecursive(history, combineUrls(...path.split("/").slice(0, -1)));
+  // } else if (prefixes.length === 1) {
+  //   console.log("1 PREFIXE");
+  //   if (path === "/") {
+  //     console.log("UNHANDLED UNDO, SHOULD EXIT APP");
+  //     return history;
+  //   } else {
+  //     return undoRecursive(
+  //       produce(history, (draft) => {
+  //         draft.prefixes[path] = [];
+  //       }),
+  //       combineUrls(...path.split("/").slice(0, -1))
+  //     );
+  //   }
+  // } else {
+  //   console.log("MANY PREFIXES");
+  //   return produce(history, (draft) => {
+  //     draft.prefixes[path].pop();
+  //   });
+  // }
 };
 export const undo = (history: NestedHistory, path?: string): NestedHistory => {
-  return undoRecursive(history, path);
+  const newHistory = undoRecursive(history, path, 10);
+  console.warn(newHistory);
+  return newHistory;
 };
