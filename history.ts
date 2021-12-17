@@ -32,7 +32,7 @@ export const getCurrentUrlFromHistory = (history: NestedHistory) => {
 };
 
 export const pushUrlToHistory = (history: NestedHistory, url: string) => {
-  console.log("push");
+  console.log("push", url);
   const newUrlSegments = [
     "/",
     ...url
@@ -40,6 +40,7 @@ export const pushUrlToHistory = (history: NestedHistory, url: string) => {
       .split("/")
       .filter((f) => !!f), // url contains empty string, fix!
   ];
+  console.log(newUrlSegments);
   const newHistory = produce(history, (draft) => {
     newUrlSegments.forEach((newSegment, newUrlSegmentIndex) => {
       const prefix = combineUrls(

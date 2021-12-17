@@ -77,7 +77,7 @@ export const urlAtom = atom(
 );
 const useNestedHistory = () => {
   const [history, setHistory] = useAtom(historyAtom);
-  console.log(history);
+  // console.log(history);
   const [url, setUrl] = useAtom(urlAtom);
   const undoLocal = (onPath?: string) =>
     setHistory((history) => undo(history, onPath));

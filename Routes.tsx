@@ -1,4 +1,5 @@
 import React, {
+  ComponentProps,
   FC,
   Fragment,
   isValidElement,
@@ -23,13 +24,19 @@ import {
   matchRoutes,
   Route,
   RouteObject,
+  Routes as RRRoutes,
 } from "react-router";
 import { NestedHistory } from "./history";
+import { Link } from "./Link";
 import { useNestedHistoryContext } from "./NativeRouter";
 import { combineUrls, getChildrenWithProps } from "./utils";
 
-type NativeRouteObject = RouteObject & { screen: boolean };
+type NativeRouteObject = RouteObject & {
+  screen?: RouteObject["element"];
+  children?: NativeRouteObject[];
+};
 
+// add screen param support to creating routes from children, minor change to RRcreateRoutesFromChildren
 const createRoutesFromChildren: (children: ReactNode) => NativeRouteObject[] = (
   children
 ) => {
@@ -73,19 +80,11 @@ const screensFromRoutes = (
   // to be used on Routes type = stack
   routes: NativeRouteObject[],
   parentPathnameBase: string,
-  history: NestedHistory,
-  tag: string
+  history: NestedHistory
 ) => {
   let screenRoutes: NativeRouteObject[] = [];
   const parentHistory = history.prefixes[parentPathnameBase];
-  // console.log({ routes, parentPathnameBase, history, parentHistory });
-  console.log({
-    tag,
-    s: parentHistory.segments.slice(0, parentHistory.index + 1),
-    r: routes,
-    parentPathnameBase,
-  });
-  // ADD SUPPORT FOR MULTIPLE LEVELS
+  // TODO: ADD SUPPORT FOR MULTIPLE LEVELS
   parentHistory.segments
     .slice(0, parentHistory.index + 1)
     .map((segment) =>
@@ -93,7 +92,7 @@ const screensFromRoutes = (
     )
     .filter((r) => !!r)
     .forEach((route) => {
-      const r = route as NativeRouteObject;
+      const r = route as NativeRouteObject; // we can assert because of filter
       if (r.screen) {
         screenRoutes.push(r);
         if (r.children) {
@@ -107,66 +106,39 @@ const screensFromRoutes = (
         }
       }
     });
-  console.log({ screenRoutes });
   return screenRoutes;
 };
 
-// renders a stack navigator if no navigator is found to plug into
-// can also render a tab navigator
-const Routes: FC<{ tag: string }> = ({ children, tag }) => {
-  const { pathname } = useLocation();
+const StackRoutes: FC<ComponentProps<typeof RRRoutes>> = ({ children }) => {
   const { history, undo } = useNestedHistoryContext();
   const routes = createRoutesFromChildren(children);
 
   let { matches: parentMatches } = React.useContext(UNSAFE_RouteContext);
   let routeMatch = parentMatches[parentMatches.length - 1];
-  let parentPathname = routeMatch ? routeMatch.pathname : "/";
   let parentPathnameBase = routeMatch ? routeMatch.pathnameBase : "/";
+  let parentPathname = routeMatch ? routeMatch.pathname : "/";
+
+  let parentRoute = routeMatch && routeMatch.route;
+
+  let location = useLocation();
+
+  // console.warn(parentPathnameBase);
+
+  // add location arg parsing
+
+  let pathname = location.pathname || "/";
+  let remainingPathname =
+    parentPathnameBase === "/"
+      ? pathname
+      : pathname.slice(parentPathnameBase.length) || "/";
+
   const flattenedRoutes = screensFromRoutes(
     routes,
-    `/${parentPathnameBase.replaceAll(/(\/|\*)*$/g, "")}`,
-    history,
-    tag
+    `/${parentPathnameBase.replaceAll(/(\/|\*)*$/g, "")}`, // QUESTION: how should we approach stars at the ends of URLs?
+    history
   );
-  console.log(flattenedRoutes);
+  // console.log(flattenedRoutes);
 
-  // console.log({ tag, flattenedRoutes });
-  // let parentParams = routeMatch ? routeMatch.params : {};
-
-  // let parentRoute = routeMatch && routeMatch.route;
-  // let remainingPathname =
-  //   parentPathnameBase === "/"
-  //     ? pathname
-  //     : pathname.slice(parentPathnameBase.length) || "/";
-  // // console.log({ prefixes: history.prefixes[pathname] });
-  // console.log(tag, {
-  //   parentPathnameBase,
-  //   parentPathname,
-  //   remainingPathname,
-  //   routes,
-  //   history,
-  //   routeMatch,
-  //   parentMatches,
-  // });
-  const prefix = history.prefixes[parentPathnameBase];
-  // console.log(prefix);
-  // const matchesForEachHistoryObject = prefix.segments.matchRoutes(routes);
-
-  // return useRoutes(createRoutesFromChildren(children));
-  // return renderMatches(
-  //   matches &&
-  //     matches.map((match) =>
-  //       Object.assign({}, match, {
-  //         params: Object.assign({}, parentParams, match.params),
-  //         pathname: joinPaths([parentPathnameBase, match.pathname]),
-  //         pathnameBase:
-  //           match.pathnameBase === "/"
-  //             ? parentPathnameBase
-  //             : joinPaths([parentPathnameBase, match.pathnameBase]),
-  //       })
-  //     ),
-  //   parentMatches
-  // );
   if (flattenedRoutes.length === 0) return null;
   return (
     <ScreenStack
@@ -185,7 +157,7 @@ const Routes: FC<{ tag: string }> = ({ children, tag }) => {
             <UNSAFE_RouteContext.Provider
               value={{ matches: [{ pathnameBase: r.path || "/" }] }}
             >
-              {r.element}
+              {r.screen}
             </UNSAFE_RouteContext.Provider>
             <Text>{JSON.stringify(flattenedRoutes.map((f) => f.path))}</Text>
           </View>
@@ -195,4 +167,79 @@ const Routes: FC<{ tag: string }> = ({ children, tag }) => {
     </ScreenStack>
   );
 };
+
+const TabsRoutes = ({ children }: ComponentProps<typeof RRRoutes>) => {
+  const { history, undo } = useNestedHistoryContext();
+  const routes = createRoutesFromChildren(children);
+  let { matches: parentMatches } = React.useContext(UNSAFE_RouteContext);
+  let routeMatch = parentMatches[parentMatches.length - 1];
+  let parentPathnameBase = routeMatch ? routeMatch.pathnameBase : "/";
+  const basenamePrefix = `/${parentPathnameBase.replaceAll(/(\/|\*)*$/g, "")}`;
+  const parentHistory = history.prefixes[basenamePrefix];
+  const currentSegment = parentHistory.segments[parentHistory.index];
+  console.log({
+    currentSegment,
+    parentHistory,
+    parentPathnameBase,
+    routes: routes.map((r) => r.path),
+    routess: routes.map((r) => r.path?.split("/")[0]),
+  });
+  return (
+    <View style={{ flex: 1 }}>
+      {/* <ScreenContainer style={{ flex: 1 }}> */}
+      {routes.map(
+        (r) =>
+          r.path?.split("/").filter((f) => !!f)[0] === currentSegment && (
+            // <Screen activityState={2}>
+
+            <View
+              style={{
+                padding: 30,
+                maxHeight: 500,
+                margin: 20,
+              }}
+            >
+              <UNSAFE_RouteContext.Provider
+                value={{ matches: [{ pathnameBase: r.path || "/" }] }}
+              >
+                {r.screen}
+              </UNSAFE_RouteContext.Provider>
+            </View>
+            // </Screen>
+          )
+      )}
+      {/* </ScreenContainer> */}
+      <View style={{ height: 90, flexDirection: "row", width: "100%" }}>
+        {routes.map((r) => (
+          <View style={{ flexGrow: 1, borderWidth: 1 }}>
+            <Link
+              to={`/${combineUrls(parentPathnameBase, r.path).replaceAll(
+                "/*",
+                ""
+              )}`}
+            >
+              {r.path} -{" "}
+              {combineUrls(parentPathnameBase, r.path).replaceAll("/*", "")}
+            </Link>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// renders a stack navigator or tabs navigator or basic switch navigator
+// can also render a tab navigator
+const Routes = (
+  props: ComponentProps<typeof RRRoutes> & { stack?: boolean; tabs?: boolean }
+) => {
+  if (props.stack) {
+    return <StackRoutes {...props} />;
+  }
+  if (props.tabs) {
+    return <TabsRoutes {...props} />;
+  }
+  return <RRRoutes {...props} />;
+};
+
 export default Routes;
