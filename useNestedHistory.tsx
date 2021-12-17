@@ -12,9 +12,9 @@ import { last } from "./utils";
 
 export const historyAtom = atom<NestedHistory>({
   prefixes: {
-    "/": { index: 0, segments: ["mates"] },
-    "/mates": { index: 0, segments: ["bestmate"] },
-    "/mates/bestmate": { index: -1, segments: [] },
+    "/": { index: 0, segments: ["friends"] },
+    "/friends": { index: -1, segments: [] },
+    // "/mates/bestmate": { index: -1, segments: [] },
   },
 });
 

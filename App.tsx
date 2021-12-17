@@ -25,13 +25,13 @@ export default function App() {
           ></Route> */}
           <Route
             path="friends/*"
-            screen={
+            element={
               <>
                 <Text>Friends screen</Text>
                 <Routes tabs>
                   <Route
-                    path="firsttab"
-                    screen={
+                    path="firsttab/testofnesting"
+                    element={
                       <Text style={{ padding: 50 }}>
                         List of friends
                         <Link to="/friends/friendsstuff">Friends</Link>
@@ -55,12 +55,14 @@ export default function App() {
           ></Route>
           <Route
             path="mates"
-            screen={
+            element={
               <>
+                <Text>stackmates</Text>
+                <Link to="/mates/bestmate">Mates</Link>
                 <Routes stack>
                   <Route
                     path="bestmate"
-                    screen={
+                    element={
                       <>
                         <Text>bestmate</Text>
                         <Link to="/mates/othermates">goto othermates2</Link>
@@ -69,7 +71,7 @@ export default function App() {
                   ></Route>
                   <Route
                     path="othermates"
-                    screen={<Text>othermates</Text>}
+                    element={<Text>othermates</Text>}
                   ></Route>
                 </Routes>
               </>
